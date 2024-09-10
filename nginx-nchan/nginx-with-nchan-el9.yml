@@ -1,0 +1,82 @@
+---
+- name: Build & install NGINX package in RPM with nchan module
+  hosts: webservers
+  become: true
+  vars:
+    - nginx_fedorapackage_url: "https://kojipkgs.fedoraproject.org//packages/nginx/1.26.2/1.fc41/src/nginx-1.26.2-1.fc41.src.rpm"
+    - nchan_url: "https://github.com/slact/nchan/archive/refs/tags/v1.3.6.tar.gz"
+    - rpmbuild_dir: "/root/rpmbuild"
+
+  tasks:
+    - name: Install RPM build tools
+      yum:
+        name: rpmdevtools
+        state: present
+
+    - name: Create RPM dev tree.
+      command: |
+        rpmdev-setuptree
+        ls {{ rpmbuild_dir }}
+      register: setuptree
+      changed_when: "setuptree.stdout == '{{ rpmbuild_dir }}'"
+
+    - name: Download NGINX source package from Fedora repositories.
+      get_url:
+        url: "{{ nginx_fedorapackage_url }}"
+        dest: "{{ rpmbuild_dir }}/SOURCES/nginx.src.rpm"
+        mode: "0400"
+
+    - name: Download the nchan source package.
+      get_url:
+        url: "{{ nchan_url }}"
+        dest: "{{ rpmbuild_dir }}/SOURCES/nchan.tar.gz"
+        mode: "0400"
+
+    - name: Decompress Source RPM with rpm2cpio.
+      shell: set -o pipefail && rpm2cpio {{ rpmbuild_dir }}/SOURCES/nginx.src.rpm | cpio -ivmd -D {{ rpmbuild_dir }}/SOURCES
+      register: rpm2cpio
+      changed_when: rpm2cpio.rc == 0
+      args:
+        executable: /usr/bin/bash
+
+
+    - name: Extract nchan package.
+      unarchive:
+        src: "{{ rpmbuild_dir }}/SOURCES/nchan.tar.gz"
+        dest: "{{ rpmbuild_dir }}/SOURCES"
+        remote_src: yes
+
+    - name: Omit version number from the extracted nchan directory.
+      shell: mv {{ rpmbuild_dir }}/SOURCES/nchan-* {{ rpmbuild_dir }}/SOURCES/nchan
+      register: mvout
+      changed_when: mvout.rc == 0
+
+    - name: Copy specfile editor script which adds nchan module at compilation.
+      copy: 
+        src: edit_specfile.sh
+        dest: /tmp/edit_specfile.sh
+        mode: 0700
+
+    - name: Run the specfile editor script.
+      shell: set -o pipefail && bash /tmp/edit_specfile.sh
+      register: scriptout
+      changed_when: scriptout.rc == 0
+      args:
+        executable: /usr/bin/bash
+
+    - name: Copy modified nginx.spec file to SPECS directory.
+      copy:
+        src: "{{ rpmbuild_dir }}/SOURCES/nginx.spec"
+        dest: "{{ rpmbuild_dir }}/SPECS/nginx.spec"
+        mode: "0600"
+        remote_src: yes
+
+    - name: Install build dependencies for NGINX.
+      command: dnf builddep -y {{ rpmbuild_dir }}/SPECS/nginx.spec
+      register: dnfoutput
+      changed_when: dnfoutput.rc == 0
+
+    - name: Build NGINX with nchan module in RPM package.
+      command: rpmbuild -bb {{ rpmbuild_dir }}/SPECS/nginx.spec
+      register: rpmoutput
+      changed_when: rpmoutput.rc == 0
