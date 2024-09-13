@@ -1,0 +1,193 @@
+---
+- name: My custom security-hardening checklist based on CIS Benchmarks for RHEL based systems.
+  hosts: testbed
+  become: true
+  vars:
+
+  tasks:
+    - name: Blacklist unused filesystem kernel modules.
+      community.general.kernel_blacklist:
+        name: {{ item }}
+        state: present
+
+      loop:
+        - cramfs
+        - freevxfs
+        - hfs
+        - hfsplus
+        - jffs2
+        - squashfs
+        - udf
+        - afs
+        - ceph
+        - cifs
+        - gfs
+        - nfs_common
+        - nfsd
+        - smbfs_common
+
+    - name: Ensure gpgcheck is globally activated.
+      shell: grep -Pi -- '^\h*gpgcheck\h*=\h*(1|true|yes)\b' /etc/dnf/dnf.conf
+      register: gpgoutput
+      changed_when: "gpgoutput.stdout == gpgcheck\=1"
+
+    - name: Ensure updates, patches, and additional security software are installed.
+      dnf:
+        name: "*"
+        state: latest
+
+    - name: Ensure SELinux is enabled
+      selinux:
+        policy: targeted
+        state: enforcing
+
+    - name: Ensure no unconfined services exist
+      shell: ps -eZ | grep unconfined_service_t
+      register: psout
+      changed_when: "psout.rc != 0"
+
+    - name: Ensure the MCS Translation Service (mcstrans) is not installed
+      dnf:
+        name: mcstrans
+        state: absent
+
+    - name: Ensure SETroubleshoot is not installed
+      dnf:
+        name: setroubleshoot
+        state: absent
+
+    - name: Ensure access to /boot/efi is restrictive.
+      file:
+        path: /boot/efi
+        mode: go-rwx
+        owner: root
+        group: root
+        recurse: true
+
+      shell: mount | grep /boot/efi | awk '{ print $1 }' | xargs blkid | awk '{ print $2 }' | grep UUID
+        register: uuid
+        # Regrepping UUID to ensure UUID column captured.
+
+      mount:
+        path: /boot/efi
+        state: absent_from_fstab
+
+      mount:
+        src: {{ uuid.stdout }}
+        path: /boot/efi
+        opts: defaults,umask=0027,fmask=0077,uid=0,gid=0 0 0
+        state: present
+        fstype: vfat
+
+    - name: Ensure address space layout randomization is enabled
+      sysctl:
+        name: kernel.randomize_va_space
+        value: '2'
+        state: present
+
+    - name: Ensure ptrace_scope is restricted
+      sysctl:
+        name: kernel.yama.ptrace_scope
+        value: '1'
+        state: present
+
+    - name: Ensure core dump backtraces and storage are disabled
+      file:
+        path: /etc/systemd/coredump.conf.d
+        state: directory
+        owner: root
+        mode: 0755
+      file:
+        path: /etc/systemd/coredump.conf.d/processsizemax.conf
+        state: touch
+        owner: root
+        mode: 0644
+      copy:
+        path: /etc/systemd/coredump.conf.d/processsizemax.conf
+        content: |
+        ProcessSizeMax=0
+        Storage=None
+
+    - name: Ensure system wide crypto policy is not set to legacy
+        shell: update-crypto-policies --set DEFAULT
+
+    # Skipped 1.6.2
+    # Skipped 1.6.3
+    # Skipped 1.6.4
+    # Skipped 1.6.5
+    # Skipped 1.6.6
+    # Skipped 1.6.7
+
+    - name: Remove /etc/motd and /etc/issue
+      file:
+        path: /etc/motd
+        state: absent
+      file:
+        path: /etc/issue
+        state: absent
+
+    # Skipped Gnome related sections
+    # Because I use headless only on my servers ¯\_(ツ)_/¯
+
+    - name: Disable unnecessary services.
+      systemd_service:
+        name: {{ item }}
+        masked: true
+        state: "stopped"
+        # Handle stopping uninstalled service failure
+      loop:
+        - autofs
+        - avahi
+        - dhcpd
+        - dhcpd6
+        - named
+        - dnsmasq
+        - smb
+        - vsftpd
+        - dovecot
+        - cyrus-imapd
+        - nfs-server
+        - ypserv
+        - cups
+        - rpcbind
+        - rsyncd
+        - snmpd
+        - telnet.socket
+        - tftp.socket
+        - tftp.service
+        - squid
+        - xinetd
+
+    - name: Ensure time synchronization is in use
+      dnf:
+        name: chrony
+        state: present
+      systemd_service:
+        name: chronyd
+        state: started
+        enabled: true
+
+    # Skipped 2.3.3
+
+    - name: Ensure cron daemon is enabled and active.
+      systemd_service:
+        name: crond
+        state: "started"
+        enabled: true
+
+    - name: Ensure crontab file permissions restricted.
+      file:
+        name: {{ item }}
+        owner: root
+        group: root
+        mode: go-rwx
+        recurse: true
+      loop:
+        - /etc/crontab
+        - /etc/cron.hourly
+        - /etc/cron.daily
+        - /etc/cron.weekly
+        - /etc/cron.monthly
+        - /etc/cron.d
+        - /etc/cron.allow
+        - /etc/cron.deny
