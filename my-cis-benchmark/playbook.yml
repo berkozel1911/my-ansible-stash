@@ -5,7 +5,7 @@
   vars:
 
   tasks:
-    - name: Blacklist unused filesystem kernel modules.
+    - name: Blacklist unnecessary kernel modules.
       community.general.kernel_blacklist:
         name: {{ item }}
         state: present
@@ -25,6 +25,11 @@
         - nfs_common
         - nfsd
         - smbfs_common
+        - dccp
+        - tipc
+        - rds
+        - sctp
+
 
     - name: Ensure gpgcheck is globally activated.
       shell: grep -Pi -- '^\h*gpgcheck\h*=\h*(1|true|yes)\b' /etc/dnf/dnf.conf
@@ -191,3 +196,42 @@
         - /etc/cron.d
         - /etc/cron.allow
         - /etc/cron.deny
+
+
+    - name: (Disablement) Harden network-related kernel parameters (Section 3.3)
+      sysctl:
+        name: {{ item }}
+        value: '0'
+        state: present
+      loop:
+        - net.ipv4.ip_forward
+        - net.ipv6.conf.all.forwarding
+        - net.ipv4.conf.all.send_redirects
+        - net.ipv4.conf.default.send_redirects
+        - net.ipv4.conf.all.accept_redirects
+        - net.ipv4.conf.default.accept_redirects
+        - net.ipv6.conf.all.accept_redirects
+        - net.ipv6.conf.default.accept_redirects
+        - net.ipv4.conf.all.secure_redirects
+        - net.ipv4.conf.default.secure_redirects
+        - net.ipv4.conf.all.accept_source_route
+        - net.ipv4.conf.default.accept_source_route
+        - net.ipv6.conf.all.accept_source_route
+        - net.ipv6.conf.default.accept_source_route
+        - net.ipv6.conf.all.accept_ra
+        - net.ipv6.conf.default.accept_ra
+
+    - name: (Enablement) Harden network-related kernel parameters (Section 3.3)
+      sysctl:
+        name: {{ item }}
+        value: '1'
+        state: present
+      loop:
+        - net.ipv4.icmp_ignore_bogus_error_responses
+        - net.ipv4.icmp_echo_ignore_broadcasts
+        - net.ipv4.conf.all.rp_filter
+        - net.ipv4.conf.default.rp_filter
+        - net.ipv4.conf.all.log_martians
+        - net.ipv4.conf.default.log_martians
+        - net.ipv4.tcp_syncookies
+        - net.ipv4.route.flush
