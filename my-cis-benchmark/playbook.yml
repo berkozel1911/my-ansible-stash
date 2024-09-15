@@ -1,3 +1,8 @@
+#########################################
+# THIS IS A DRAFT PLAYBOOK.             #
+# NOT CONFIRMED IF IT'S WORKING OR NOT  #
+# WILL BE REWORKED LATER                #
+#########################################
 ---
 - name: My custom security-hardening checklist based on CIS Benchmarks for RHEL based systems.
   hosts: testbed
@@ -235,3 +240,16 @@
         - net.ipv4.conf.default.log_martians
         - net.ipv4.tcp_syncookies
         - net.ipv4.route.flush
+
+    - name: Ensure permissions on /etc/ssh/sshd_config are configured
+      file:
+        name: /etc/ssh/sshd_config
+        owner: root
+        group: root
+        mode: 0600
+
+    - name:  Ensure permissions on SSH private host key files are
+configured
+      file:
+        name: /home/*/.ssh/*
+        mode: 0600
