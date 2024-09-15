@@ -1,2 +1,224 @@
+# Notes:
+# 1- This playbook assumes only one harddrive installed on the target VM.
+# 2- Install sshd daemon first and write VMs IP address to the inventory file.
 ---
-name: My custom quick Arch Linux build-up script in VMs.
+- name: My custom quick Arch Linux build-up script in VMs.
+  hosts: target
+  remote_user: root
+  vars:
+    timezone: Europe/Istanbul
+    mirrorlocation: CH
+    hostname: archlinux
+    user: berk
+    userpw: berk123
+    rootpw: root123
+
+  tasks:
+    - name: Verify the boot mode.
+      command: cat /sys/firmware/efi/fw_platform_size
+      register: platform_size
+      changed_when: "platform_size.stdout == '64'"
+
+    - name: Connect to the internet.
+      command: ping -c 4 google.com
+      register: ping_res
+      changed_when: "ping_res.rc == 0"
+
+    - name: Update the system clock.
+      community.general.timezone:
+        name: "{{ timezone }}"
+
+    - name: Determine the installation disk.
+      shell: set -o pipefail && lsblk -pn | grep -v archiso | awk '{ print $1 }'
+      register: disk
+      changed_when: "disk.rc == 0 and disk.stdout != ''"
+      args:
+        executable:
+          /usr/bin/bash
+
+    - name: Wipe any existing filesystems on the target disk.
+      command: wipefs -a {{ disk.stdout }}
+      register: wipefs_out
+      changed_when: "wipefs_out.rc != 0"
+
+
+    # Because parted module is bugged for an unknown reason, 
+    # the following lines won't create the /boot partition.
+
+    # - name: Create the UEFI partition.
+    #   parted:
+    #     device: "{{ disk.stdout }}"
+    #     number: 1
+    #     part_start: 0%
+    #     part_end: 513MiB
+    #     label: gpt
+    #     state: present
+
+    # - name: Create the /boot partition.
+    #   parted:
+    #     device: "{{ disk.stdout }}"
+    #     number: 2
+    #     part_start: 513MiB
+    #     part_end: 1025MiB
+    #     state: present
+
+    # - name: Create the root partition.
+    #   parted:
+    #     device: "{{ disk.stdout }}"
+    #     number: 3
+    #     part_start: 1025MiB
+    #     part_end: "100%"
+    #     state: present
+
+    # So therefore i'm using sfdisk by manually instead...
+
+    - name: Create a GPT partition table on the target disk.
+      command: sgdisk -o {{ disk.stdout }}
+      register: sgdisk
+      changed_when: "sgdisk.rc == 0"
+
+    - name: Create the UEFI partition on the target disk.
+      command: sgdisk -n 1:0:+512MiB {{ disk.stdout }}
+      register: sgdisk
+      changed_when: "sgdisk.rc == 0"
+
+    - name: Create the boot partition on the target disk.
+      command: sgdisk -n 2:0:+512MiB {{ disk.stdout }}
+      register: sgdisk
+      changed_when: "sgdisk.rc == 0"
+
+    - name: Create the root partition on the target disk.
+      command: sgdisk -n 3:0:0 {{ disk.stdout }}
+      register: sgdisk
+      changed_when: "sgdisk.rc == 0"
+
+    - name: Create a VFAT filesystem on the UEFI partition.
+      community.general.filesystem:
+        fstype: vfat
+        dev: "{{ disk.stdout }}1"
+        force: true
+
+    - name: Create a ext4 filesystem on the /boot partition.
+      community.general.filesystem:
+        fstype: ext4
+        dev: "{{ disk.stdout }}2"
+        force: true
+
+    - name: Create a ext4 filesystem on the root partition.
+      community.general.filesystem:
+        fstype: ext4
+        dev: "{{ disk.stdout }}3"
+        force: true
+
+    - name: Mount the root partition.
+      mount:
+        path: /mnt
+        src: "{{ disk.stdout }}3"
+        fstype: ext4
+        opts: defaults,rw
+        state: ephemeral
+
+    - name: Create the /boot directory in the root partition.
+      file:
+        path: /mnt/boot
+        state: directory
+        mode: '0700'
+
+    - name: Mount the /boot partition.
+      mount:
+        path: /mnt/boot
+        src: "{{ disk.stdout }}2"
+        fstype: ext4
+        opts: defaults,rw
+        state: ephemeral
+
+    - name: Create /boot/efi directory in the boot partition.
+      file:
+        path: /mnt/boot/efi
+        state: directory
+        mode: "0700"
+
+    - name: Mount the EFI partition.
+      mount:
+        path: /mnt/boot/efi
+        src: "{{ disk.stdout }}1"
+        fstype: vfat
+        opts: defaults,rw
+        state: ephemeral
+
+    - name: Change pacman mirrors to desired country ({{ mirrorlocation }}).
+      shell: reflector -c CH > /etc/pacman.d/mirrorlist
+      register: reflector
+      changed_when: "reflector.rc == 0"
+
+    - name: Update pacman cache (pacman -Sy)
+      community.general.pacman:
+        update_cache: true
+
+    - name: Install essential packages.
+      command: pacstrap -K /mnt base base-devel linux linux-firmware networkmanager openssh grub efibootmgr
+      register: pacstrap
+      changed_when: "pacstrap.rc == 0"
+
+    - name: Generate fstab.
+      shell: genfstab -U /mnt >> /mnt/etc/fstab
+      register: genfstab
+      changed_when: "genfstab.rc == 0"
+
+    - name: Set the time zone.
+      command: arch-chroot /mnt ln -sf /usr/share/zoneinfo/{{ timezone }} /etc/locatime
+      changed_when: false
+
+    - name: Set the system clock to hardware clock.
+      command: arch-chroot /mnt hwclock --systohc
+      changed_when: false
+
+    - name: Set localization (EN - US)
+      command: arch-chroot /mnt sed -i '/^#en_US/s/^#//' /etc/locale.gen
+      changed_when: false
+
+    - name: Edit /etc/locale.conf
+      shell: set -o pipefail && echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
+      register: echo
+      changed_when: "echo.rc == 0"
+      args:
+        executable:
+          /usr/bin/bash
+
+    - name: Write the hostname
+      shell: set -o pipefail && echo {{ hostname }} > /mnt/etc/hostname
+      register: echo
+      changed_when: "echo.rc == 0"
+      args:
+        executable:
+          /usr/bin/bash
+
+    - name: Build a fresh initramfs image.
+      command: arch-chroot /mnt mkinitcpio -P
+      changed_when: false
+
+    - name: Set the root password.
+      shell: set -o pipefail && echo {{ rootpw }} | arch-chroot /mnt passwd root --stdin
+      changed_when: false
+      args:
+        executable:
+          /usr/bin/bash
+
+    - name: Add the default user.
+      command: arch-chroot /mnt useradd {{ user }}
+      changed_when: false
+
+    - name: Set the password of the default user.
+      shell: set -o pipefail && echo {{ userpw }} | arch-chroot /mnt passwd berk --stdin
+      changed_when: false
+      args:
+        executable:
+          /usr/bin/bash
+
+    - name: Install GRUB bootloader.
+      command: arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --boot-directory=/boot --bootloader-id=GRUB-Arch
+      changed_when: false
+
+    - name: Create the GRUB configuration.
+      command: arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+      changed_when: false
