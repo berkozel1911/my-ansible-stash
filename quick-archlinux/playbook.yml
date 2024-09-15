@@ -209,7 +209,7 @@
       changed_when: false
 
     - name: Set the password of the default user.
-      shell: set -o pipefail && echo {{ userpw }} | arch-chroot /mnt passwd berk --stdin
+      shell: set -o pipefail && echo {{ userpw }} | arch-chroot /mnt passwd {{ user }} --stdin
       changed_when: false
       args:
         executable:
