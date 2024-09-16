@@ -2,6 +2,63 @@
 - name: A Debian installation tweaker for my daily driver.
   hosts: self
   vars:
+    pkgs: |
+      ansible bluez exfatprogs ffmpeg firefox-esr firewalld firmware-amd-graphics 
+      firmware-iwlwifi firmware-linux-free firmware-linux-nonfree g++ gcc git golang 
+      gwenview intel-microcode kdenlive kde-plasma-desktop keepassxc libreoffice 
+      libreoffice-plasma m4 mpv net-tools ntfs-3g obs-studio okular openssh-client 
+      openssh-server openvpn os-prober p7zip-full pavucontrol pipewire 
+      pipewire-pulse playerctl plocate psmisc pulseaudio-utils python3-pip 
+      qbittorrent steam sublime-text tmux torbrowser-launcher tracerouter unar unzip 
+      virt-manager vlc wireplumber wget zsh
+  become: true
+  tasks:
+    - name: Tweak Debian's official repositories.
+      copy:
+        src: assets/sources.list
+        dest: /etc/apt/sources.list
+
+    - name: Add i386 architecture to dpkg.
+
+    
+      command: dpkg --add-architecture i386
+      register: dpkg
+      changed_when: "dpkg.rc == 0"
+
+    - name: Update apt repository cache
+      apt:
+        update_cache: yes
+
+    - name: Install essential packages.
+      apt:
+        name: {{ pkgs }}
+
+    - name: Add sublime-text's GPG keys.
+      shell: |
+        set -o pipefail && wget -qO - https://download.sublimetext.com/sublimehq-pub.gpg | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/sublimehq-archive.gpg > /dev/null
+      register: subl
+      changed_when: "subl.rc == 0"
+      args:
+        executable:
+          /usr/bin/bash
+
+    - name: Install sublime-text's repositories.
+      shell: |
+        set -o pipefail && echo "deb https://download.sublimetext.com/ apt/stable/" | sudo tee /etc/apt/sources.list.d/sublime-text.list
+      register: subl
+      changed_when: "subl.rc == 0"
+      args:
+        executable:
+          /usr/bin/bash
+
+    - name: Install sublime-text.
+      apt:
+        name: sublime-text
+        update_cache: yes
+
+
+
+
 
     # install pkgs
     # install fonts
