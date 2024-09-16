@@ -1,0 +1,24 @@
+---
+- name: A Debian installation tweaker for my daily driver.
+  hosts: self
+  vars:
+
+    # install pkgs
+    # install fonts
+    # tweak KDE
+      # themes
+      # fonts
+      # cursors
+      # import config ?
+    # setup firewalld
+    # harden system security
+    # enable backports repository
+    # install backported kernel
+    # add needed proprietary repositories
+    # change initramfs compression to fastest (zstd?)
+    # services
+    # remove bloated packages
+    # enable i386 packages
+    # install omz
+    # set console font
+    # kernel parameters
