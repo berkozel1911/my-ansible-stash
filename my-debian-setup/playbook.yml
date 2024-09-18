@@ -6,11 +6,10 @@
       ansible bluez exfatprogs ffmpeg firefox-esr firewalld firmware-amd-graphics 
       firmware-iwlwifi firmware-linux-free firmware-linux-nonfree g++ gcc git golang 
       gwenview intel-microcode kdenlive kde-plasma-desktop keepassxc libreoffice 
-      libreoffice-plasma m4 mpv net-tools ntfs-3g obs-studio okular openssh-client 
-      openssh-server openvpn os-prober p7zip-full pavucontrol pipewire 
-      pipewire-pulse playerctl plocate psmisc pulseaudio-utils python3-pip 
-      qbittorrent steam sublime-text tmux torbrowser-launcher tracerouter unar unzip 
-      virt-manager vlc wireplumber wget zsh
+      libreoffice-plasma m4 mpv net-tools ntfs-3g obs-studio okular openvpn os-prober 
+      p7zip-full pavucontrol pipewire pipewire-pulse playerctl plocate psmisc 
+      pulseaudio-utils python3-pip qbittorrent steam sublime-text tmux 
+      torbrowser-launcher tracerouter unar unzip virt-manager vlc wireplumber wget zsh
   become: true
   tasks:
     - name: Tweak Debian's official repositories.
@@ -19,19 +18,14 @@
         dest: /etc/apt/sources.list
 
     - name: Add i386 architecture to dpkg.
-
-    
       command: dpkg --add-architecture i386
       register: dpkg
       changed_when: "dpkg.rc == 0"
 
-    - name: Update apt repository cache
-      apt:
-        update_cache: yes
-
     - name: Install essential packages.
       apt:
         name: {{ pkgs }}
+        update_cache: yes
 
     - name: Add sublime-text's GPG keys.
       shell: |
@@ -56,26 +50,122 @@
         name: sublime-text
         update_cache: yes
 
+    - name: Copy my fav fonts.
+      unarchive:
+        src: assets/fonts.tar.gz
+        dest: /usr/share/fonts
+
+    - name: Update font cache.
+      command: fc-cache -f
+      register: fc
+      changed_when: "fc.rc == 0"
 
 
+    - name: Ensure firewalld is activated.
+      systemd_service:
+        name: firewalld
+        enabled: yes
+        state: started
 
+    - name: Disable unused services in firewalld.
+      firewalld:
+        service: dhcpv6-client
+        state: disabled
+        permanent: true
+        zone: public
 
-    # install pkgs
-    # install fonts
-    # tweak KDE
-      # themes
-      # fonts
-      # cursors
-      # import config ?
-    # setup firewalld
+    - name: Install the latest backported kernel.
+      apt:
+        name: 
+          - linux-image-amd64
+          - linux-headers-amd64
+        default_release: {{ ansible_release.codename }}-backports
+        state: latest
+
+    - name: Install chrony time synchronization client.
+      apt:
+        name: chrony
+        state: present
+
+    - name: Enable chronyd service.
+      systemd_service:
+        name: chronyd
+        enabled: true
+        state: started
+
+    - name: Mask systemd units that I don't need.
+      systemd_service:
+        name: {{ item  }}
+        masked: true
+        state: stopped
+        loop:
+          - cups
+          - autofs
+          - avahi
+
+    - name: Blacklist kernel modules that I don't need.
+      community.general.kernel_blacklist:
+        name: {{ item }}
+        state: present
+        loop:
+          - net.ifnames
+          - cramfs
+          - freevxfs
+          - hfs
+          - hfsplus
+          - jffs2
+          - squashfs
+          - udf
+          - nouveau
+          - dccp
+          - tipc
+          - rds
+          - sctp
+
+    - name: Write my custom kernel parameters. (Disablement)
+      sysctl: 
+        name: {{ item }}
+        value: '0'
+        state: present
+      loop:
+          - net.ipv4.ip_forward
+          - net.ipv4.conf.all.send_redirects
+          - net.ipv4.conf.default.send_redirects
+          - net.ipv4.conf.all.accept_redirects
+          - net.ipv4.conf.default.accept_redirects
+          - net.ipv4.conf.all.secure_redirects
+          - net.ipv4.conf.default.secure_redirects
+          - net.ipv4.conf.all.accept_source_route
+          - net.ipv4.conf.default.accept_source_route
+
+      - name: Write my custom kernel parameters. (Enablement)
+        sysctl:
+          name: {{ item }}
+          value: '1'
+          state: present
+        loop:
+          - net.ipv6.conf.all.disable_ipv6
+          - net.ipv4.icmp_ignore_bogus_error_responses
+          - net.ipv4.icmp_echo_ignore_broadcasts
+          - net.ipv4.conf.all.rp_filter
+          - net.ipv4.conf.default.rp_filter
+          - net.ipv4.conf.all.log_martians
+          - net.ipv4.conf.default.log_martians
+          - net.ipv4.tcp_syncookies
+
+    - name: Change initramfs compression to lz4.
+      lineinfile:
+        path: /etc/initramfs-tools/initramfs.conf
+        regexp: "^COMPRESS="
+        line: "COMPRESS=lz4"
+
+    - name: Build a fresh initramfs image.
+      command: update-initramfs -u -k all
+      register: initramfs
+      changed_when: "initramfs.rc == 0"
+
     # harden system security
-    # enable backports repository
-    # install backported kernel
-    # add needed proprietary repositories
-    # change initramfs compression to fastest (zstd?)
     # services
     # remove bloated packages
-    # enable i386 packages
-    # install omz
     # set console font
     # kernel parameters
