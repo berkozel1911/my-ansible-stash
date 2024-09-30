@@ -1,0 +1,18 @@
+- name: Testing key-value pairs.
+  hosts: playground
+  vars:
+    
+    keyvalue:
+      key0: value0
+      key1: value1
+
+  tasks:
+  - name: Print the keyvalue itself
+    command: echo {{ keyvalue }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
+
+  - name: Print the keyvalue pairs
+    command: echo {{ keyvalue['key0'] }} {{ keyvalue['key1'] }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"

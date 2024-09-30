@@ -1,0 +1,12 @@
+---
+- name: Testing simple variable(s)
+  hosts: playground
+  vars:
+    simplevar: this is a simple variable 0.
+
+
+  tasks:
+  - name: Print the value of simplevar
+    command: echo {{ simplevar }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"

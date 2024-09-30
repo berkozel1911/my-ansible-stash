@@ -1,0 +1,30 @@
+---
+- name: Testing arrays.
+  hosts: playground
+  vars:
+    
+    array:
+      - Istanbul
+      - Rome
+      - Frankfurt
+
+  tasks:
+  - name: Print the array itself
+    command: echo {{ array }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
+
+  - name: Print the 0th element of array
+    command: echo {{ array[0] }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
+
+  - name: Print the 0th element of array
+    command: echo {{ array[1] }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
+
+  - name: Print the 0th element of array
+    command: echo {{ array[2] }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
