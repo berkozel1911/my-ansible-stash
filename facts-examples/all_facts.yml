@@ -1,0 +1,8 @@
+---
+- name: Printing all Ansible facts.
+  hosts: playground
+  tasks:
+  - name: Print
+    command: echo {{ ansible_facts }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"

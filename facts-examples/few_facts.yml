@@ -1,0 +1,34 @@
+---
+- name: Inspecting Ansible facts.
+  hosts: playground
+
+  tasks:
+  - name: Print assigned IPv4 address.
+    command: echo {{ ansible_all_ipv4_addresses }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
+
+  - name: Print SELinux status
+    command: echo {{ ansible_selinux }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
+
+  - name: Print BIOS information
+    command: echo {{ ansible_bios_date }} {{ ansible_bios_version }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
+
+  - name: Print kernel information
+    command: echo {{ ansible_kernel }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
+
+  - name: Print memory space
+    command: echo {{ ansible_memtotal_mb }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
+
+  - name: Print distro information
+    command: echo {{ ansible_os_family }}
+    register: echo
+  - debug: msg="{{ echo.stdout }}"
