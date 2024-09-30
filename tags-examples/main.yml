@@ -1,0 +1,16 @@
+---
+- name: Playing with tags.
+  hosts: playground
+
+  tasks:
+    - name: Install chrony
+      yum:
+        name: chrony
+        state: present
+      tags: install
+
+    - name: Remove chronyd
+      yum:
+        name: chrony
+        state: absent
+      tags: remove
