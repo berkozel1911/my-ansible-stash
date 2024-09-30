@@ -1,0 +1,25 @@
+---
+- name: Loop examples.
+  hosts: playground
+  vars:
+    list0:
+      - list0-elm0
+      - list0-elm1
+      - list0-elm2
+
+  tasks:
+  - name: Print list0
+    command: echo {{ item }}
+    register: echo
+    loop: "{{ list0 }}"
+  - debug: msg="{{ echo.stdout }}"
+
+  - name: Testing until keyword.
+    command: echo {{ item }}
+    register: echo
+    with_items:
+      - word0
+      - word1
+      - word2
+      - word3
+    until: "{{ echo.stdout }} == word2"
